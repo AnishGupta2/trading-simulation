@@ -3,7 +3,11 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import axios from 'axios';
 import './App.css';
 
+// Fallback: If VITE_API_URL isn't injected during Vercel build, fall back to localhost
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+// Debug log to help identify what URL the frontend is actually using
+console.log("Active Backend API URL:", API_URL);
 
 // --- NAVIGATION BAR ---
 function NavBar() {
