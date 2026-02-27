@@ -4,7 +4,11 @@ const cors = require('cors');
 const fs = require('fs');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: '*', // Allow all origins for the game (including Vercel deployment)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 // Set higher limit for restore JSON payloads
 app.use(bodyParser.json({ limit: '10mb' }));
 
