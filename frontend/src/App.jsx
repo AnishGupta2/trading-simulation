@@ -101,6 +101,7 @@ function StockBroker() {
   const [quantity, setQuantity] = useState('');
   const [lockedPrice, setLockedPrice] = useState(null);
   const [txnDetails, setTxnDetails] = useState(null);
+  const [orderCart, setOrderCart] = useState([]); // Array of { stockId, name, type, quantity, estimatedValue }
 
   useEffect(() => {
     axios.get(`${API_URL}/market`).then(res => setStocks(res.data.stocks));
@@ -110,19 +111,62 @@ function StockBroker() {
     if (teamId) axios.get(`${API_URL}/team/${teamId}`).then(res => setTeamInfo(res.data));
   }
 
-  const handleTrade = (type) => {
+  const addToCart = (type) => {
+    if (!selectedStock || !quantity || isNaN(parseInt(quantity)) || parseInt(quantity) <= 0) return;
+    const currentStock = stocks.find(s => s.id === selectedStock);
+    const price = lockedPrice || currentStock.currentPrice;
+
+    setOrderCart([...orderCart, {
+      stockId: selectedStock,
+      name: currentStock.name,
+      type,
+      quantity: parseInt(quantity),
+      priceLocked: !!lockedPrice,
+      estimatedValue: price * parseInt(quantity)
+    }]);
+
+    setQuantity('');
+    setSelectedStock('');
+    setLockedPrice(null);
+  };
+
+  const removeFromCart = (index) => {
+    const newCart = [...orderCart];
+    newCart.splice(index, 1);
+    setOrderCart(newCart);
+  };
+
+  const submitBatchOrder = () => {
+    if (orderCart.length === 0) return;
+
     axios.post(`${API_URL}/trade/stock`, {
-      teamId, stockId: selectedStock, type, quantity
+      teamId,
+      orders: orderCart.map(o => ({ stockId: o.stockId, type: o.type, quantity: o.quantity }))
     }).then(res => {
-      setTxnDetails({ type, price: res.data.executionPrice, total: res.data.cashToCollectOrGive, cash: res.data.newCash });
-      setLockedPrice(null);
-      setQuantity('');
+      setTxnDetails({
+        message: res.data.message,
+        netCashTotal: res.data.netCashToCollectOrGive,
+        cash: res.data.newCash,
+        processed: res.data.processed
+      });
+      setOrderCart([]);
       checkTeam();
-    }).catch(err => alert(err.response?.data?.error));
+    }).catch(err => {
+      // Since backend might return an array of errors now or a top level object error
+      let errMsg = "Batch failed.";
+      if (err.response?.data?.error) errMsg = err.response.data.error;
+      if (err.response?.data?.errors) errMsg = err.response.data.errors.join("\n");
+      alert(errMsg);
+    });
   };
 
   const currentStock = stocks.find(s => s.id === selectedStock);
   const price = lockedPrice || (currentStock ? currentStock.currentPrice : 0);
+
+  // Calculate Net Cart Value (Negative means team pays broker, Positive means broker pays team)
+  const netCartValue = orderCart.reduce((sum, order) => {
+    return order.type === 'BUY' ? sum - order.estimatedValue : sum + order.estimatedValue;
+  }, 0);
 
   return (
     <div className="container" style={{ maxWidth: '600px', margin: '0 auto', height: 'auto', overflow: 'visible', paddingBottom: '50px' }}>
@@ -188,56 +232,85 @@ function StockBroker() {
               </button>
             </div>
 
-            <label style={{ color: '#888', fontSize: '0.9em', fontWeight: 'bold' }}>ORDER DETAILS</label>
+            <label style={{ color: '#888', fontSize: '0.9em', fontWeight: 'bold' }}>QUANTITY</label>
             <div style={{ position: 'relative', marginTop: '8px', marginBottom: '15px' }}>
               <input
                 type="number"
                 value={quantity}
                 onChange={e => setQuantity(e.target.value)}
                 placeholder="0"
-                style={{ fontSize: '1.8em', paddingRight: '60px', textAlign: 'right', fontFamily: 'monospace' }}
+                style={{ fontSize: '1.8em', paddingRight: '60px', textAlign: 'right', fontFamily: 'monospace', margin: 0 }}
                 min="1"
               />
               <span style={{ position: 'absolute', right: '15px', top: '50%', transform: 'translateY(-50%)', color: '#666', fontWeight: 'bold' }}>QTY</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '15px 0 25px 0' }}>
-              <span style={{ color: '#888', fontWeight: 'bold' }}>ESTIMATED TOTAL</span>
-              <span style={{ fontSize: '1.4em', fontWeight: 'bold', fontFamily: 'monospace', color: '#fff' }}>₹{(price * (parseInt(quantity) || 0)).toLocaleString()}</span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <button className="btn-buy" onClick={() => handleTrade('BUY')}>
-                <div style={{ fontSize: '1.2em' }}>BUY</div>
-                <div style={{ fontSize: '0.7em', opacity: 0.8, marginTop: '2px' }}>TAKE CASH</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+              <button className="btn-buy" onClick={() => addToCart('BUY')}>
+                <div style={{ fontSize: '1.1em' }}>ADD BUY</div>
               </button>
-              <button className="btn-sell" onClick={() => handleTrade('SELL')}>
-                <div style={{ fontSize: '1.2em' }}>SELL</div>
-                <div style={{ fontSize: '0.7em', opacity: 0.8, marginTop: '2px' }}>GIVE CASH</div>
+              <button className="btn-sell" onClick={() => addToCart('SELL')}>
+                <div style={{ fontSize: '1.1em' }}>ADD SELL</div>
               </button>
             </div>
           </div>
         )}
 
+        {/* ORDER CART */}
+        {orderCart.length > 0 && (
+          <div style={{ marginTop: '30px', background: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+            <h3 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #333', paddingBottom: '10px' }}>🛒 Pending Batch Order</h3>
+            {orderCart.map((order, index) => (
+              <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', padding: '10px', background: '#0a0a0a', borderRadius: '4px' }}>
+                <div>
+                  <span style={{ color: order.type === 'BUY' ? 'var(--neon-green)' : 'var(--neon-red)', fontWeight: 'bold', marginRight: '10px' }}>{order.type}</span>
+                  <span style={{ fontWeight: 'bold' }}>{order.quantity}x {order.name}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <span style={{ fontFamily: 'monospace', color: '#aaa' }}>~₹{order.estimatedValue.toLocaleString()}</span>
+                  <button onClick={() => removeFromCart(index)} style={{ background: 'transparent', border: 'none', color: '#ff4444', fontSize: '1.2em', cursor: 'pointer', padding: 0 }}>×</button>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0', padding: '15px', background: 'rgba(0,0,0,0.5)', borderRadius: '6px' }}>
+              <span style={{ color: '#888', fontWeight: 'bold' }}>ESTIMATED SETTLEMENT</span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '1.4em', fontWeight: 'bold', fontFamily: 'monospace', color: netCartValue > 0 ? 'var(--neon-green)' : (netCartValue < 0 ? 'var(--neon-red)' : '#fff') }}>
+                  {netCartValue > 0 ? '+₹' + netCartValue.toLocaleString() : (netCartValue < 0 ? '-₹' + Math.abs(netCartValue).toLocaleString() : '₹0')}
+                </div>
+                <div style={{ fontSize: '0.8em', color: '#666' }}>
+                  {netCartValue > 0 ? 'Broker pays Team' : 'Broker collects from Team'}
+                </div>
+              </div>
+            </div>
+
+            <button onClick={submitBatchOrder} style={{ width: '100%', padding: '15px', background: 'white', color: 'black', fontSize: '1.2em', fontWeight: 'bold', borderRadius: '6px', cursor: 'pointer', border: 'none' }}>
+              SUBMIT BATCH ({orderCart.length})
+            </button>
+          </div>
+        )}
+
         {/* SUCCESS MESSAGE */}
         {txnDetails && (
-          <div className="success-box" style={{ borderColor: txnDetails.type === 'BUY' ? 'var(--neon-green)' : 'var(--neon-red)', backgroundColor: txnDetails.type === 'BUY' ? 'rgba(0,255,136,0.1)' : 'rgba(255,51,51,0.1)' }}>
-            <h2 style={{ margin: '0 0 15px 0', color: txnDetails.type === 'BUY' ? 'var(--neon-green)' : 'var(--neon-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              {txnDetails.type === 'BUY' ? '🟢' : '🔴'} TRADE EXECUTED
+          <div className="success-box" style={{ borderColor: 'var(--neon-green)', backgroundColor: 'rgba(0,255,136,0.1)', marginTop: '20px' }}>
+            <h2 style={{ margin: '0 0 15px 0', color: 'var(--neon-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+              ✅ BATCH EXECUTED
             </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '6px', marginBottom: '15px' }}>
-              <div>
-                <div style={{ color: '#888', fontSize: '0.8em' }}>ACTION</div>
-                <div style={{ fontWeight: 'bold', color: '#fff' }}>{txnDetails.type}</div>
-              </div>
-              <div>
-                <div style={{ color: '#888', fontSize: '0.8em' }}>FILLED PRICE</div>
-                <div style={{ fontWeight: 'bold', fontFamily: 'monospace', color: '#fff' }}>₹{Number(txnDetails.price).toFixed(1)}</div>
-              </div>
-              <div style={{ gridColumn: '1 / span 2' }}>
-                <div style={{ color: '#888', fontSize: '0.8em' }}>{txnDetails.type === 'BUY' ? 'CASH DEDUCTED' : 'CASH ADDED'}</div>
-                <div style={{ fontSize: '1.5em', fontWeight: 'bold', fontFamily: 'monospace', color: txnDetails.type === 'BUY' ? 'var(--neon-red)' : 'var(--neon-green)' }}>
-                  {txnDetails.type === 'BUY' ? '-' : '+'} ₹{txnDetails.total.toLocaleString()}
+            <div style={{ marginBottom: '15px' }}>
+              {txnDetails.processed.map((p, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.9em' }}>
+                  <span>{p.type} {p.quantity}x {p.stockId}</span>
+                  <span style={{ fontFamily: 'monospace' }}>@ ₹{p.executionPrice}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '6px', marginBottom: '15px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#888', fontSize: '0.8em', marginBottom: '5px' }}>FINAL BROKER SETTLEMENT</div>
+                <div style={{ fontSize: '1.8em', fontWeight: 'bold', fontFamily: 'monospace', color: txnDetails.netCashTotal > 0 ? 'var(--neon-green)' : (txnDetails.netCashTotal < 0 ? 'var(--neon-red)' : '#fff') }}>
+                  {txnDetails.netCashTotal > 0 ? `COLLECT ₹${txnDetails.netCashTotal.toLocaleString()} FROM TEAM` : (txnDetails.netCashTotal < 0 ? `PAY ₹${Math.abs(txnDetails.netCashTotal).toLocaleString()} TO TEAM` : '₹0 SETTLEMENT')}
                 </div>
               </div>
             </div>

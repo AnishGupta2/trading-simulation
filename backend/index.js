@@ -39,15 +39,15 @@ let stocks = [
     { id: 'zomato', name: 'Zomato', basePrice: 84, currentPrice: 84, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
     { id: 'paytm', name: 'Paytm', basePrice: 70, currentPrice: 70, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
     { id: 'policybazaar', name: 'PolicyBazaar', basePrice: 62, currentPrice: 62, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
-    { id: 'cartrade', name: 'CarTrade', basePrice: 62, currentPrice: 63, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
+    { id: 'cartrade', name: 'CarTrade', basePrice: 62, currentPrice: 62, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
     { id: 'tcs', name: 'TCS', basePrice: 87, currentPrice: 87, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
     { id: 'infosys', name: 'Infosys', basePrice: 75, currentPrice: 75, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
     { id: 'coforge', name: 'Coforge', basePrice: 62, currentPrice: 62, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
-    { id: 'nucleus', name: 'Nucleus Software', basePrice: 53, currentPrice: 54, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
-    { id: 'sunpharma', name: 'Sun Pharma', basePrice: 82, currentPrice: 83, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
-    { id: 'drreddy', name: 'Dr Reddy', basePrice: 72, currentPrice: 74, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
-    { id: 'biocon', name: 'Biocon', basePrice: 62, currentPrice: 63, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
-    { id: 'unichem', name: 'Unichem Labs', basePrice: 55, currentPrice: 56, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
+    { id: 'nucleus', name: 'Nucleus Software', basePrice: 53, currentPrice: 53, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
+    { id: 'sunpharma', name: 'Sun Pharma', basePrice: 82, currentPrice: 82, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
+    { id: 'drreddy', name: 'Dr Reddy', basePrice: 72, currentPrice: 72, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
+    { id: 'biocon', name: 'Biocon', basePrice: 62, currentPrice: 62, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
+    { id: 'unichem', name: 'Unichem Labs', basePrice: 55, currentPrice: 55, demand: 0, shockFactor: GAME_CONFIG.SHOCK_DEFAULT },
 ];
 
 // 2. Teams (Tracks CASH + STOCKS)
@@ -113,65 +113,97 @@ app.get('/api/team/:id', (req, res) => {
     res.json(team);
 });
 
-// 3. STOCK TRADE
+// 3. STOCK TRADE (BATCH PROCESSING)
 app.post('/api/trade/stock', (req, res) => {
-    const { teamId, stockId, type, quantity } = req.body;
+    const { teamId, orders } = req.body;
 
-    // --- BASIC INPUT VALIDATION ---
-    if (!teamId || !stockId || !type || !quantity) {
-        return res.status(400).json({ error: "Missing required parameters (teamId, stockId, type, quantity)" });
+    // --- VALIDATION ---
+    if (!teamId || !Array.isArray(orders) || orders.length === 0) {
+        return res.status(400).json({ error: "Missing teamId or valid orders array." });
     }
-    if (type !== 'BUY' && type !== 'SELL') {
-        return res.status(400).json({ error: "Invalid trade type. Must be BUY or SELL" });
-    }
-    const qty = parseInt(quantity);
-    if (isNaN(qty) || qty <= 0) {
-        return res.status(400).json({ error: "Invalid quantity. Must be a positive number." });
-    }
-    // ----------------------------
-
-    const stock = stocks.find(s => s.id === stockId);
-    if (!stock) return res.status(404).json({ error: "Stock not found" });
 
     const team = getTeam(teamId);
-    const tradeValue = stock.currentPrice * qty;
+    let netCashChange = 0; // Positive means team gains cash (selling), negative means they pay (buying)
+    let processedOrders = [];
+    let errors = [];
 
-    // Initialize stock holding if new
-    if (!team.stocks[stockId]) team.stocks[stockId] = 0;
-    if (!team.lockedStocks[stockId]) team.lockedStocks[stockId] = 0;
+    // Process each order sequentially
+    for (const order of orders) {
+        const { stockId, type, quantity } = order;
 
-    if (type === 'BUY') {
-        // CHECK 1: Enough Cash?
-        if (team.cash < tradeValue) {
-            return res.status(400).json({ error: `Not enough cash! Need ₹${tradeValue}, have ₹${team.cash}` });
-        }
-        team.cash -= tradeValue;
-        team.stocks[stockId] += qty;
-        team.lockedStocks[stockId] += qty; // Lock these shares for the current round
-        stock.demand += qty;
-    } else if (type === 'SELL') {
-        const availableToSell = team.stocks[stockId] - team.lockedStocks[stockId];
-        // CHECK 2: Enough Unlocked Stocks?
-        if (team.stocks[stockId] < qty) {
-            return res.status(400).json({ error: `Not enough stocks! Have ${team.stocks[stockId]}` });
-        }
-        if (availableToSell < qty) {
-            return res.status(400).json({ error: `Cannot sell stocks bought in the current round! Wait for next round.` });
+        if (type !== 'BUY' && type !== 'SELL') {
+            errors.push(`[${stockId}] Invalid type. Must be BUY or SELL.`);
+            continue;
         }
 
-        team.cash += tradeValue;
-        team.stocks[stockId] -= qty;
-        stock.demand -= qty;
+        const qty = parseInt(quantity);
+        if (isNaN(qty) || qty <= 0) {
+            errors.push(`[${stockId}] Invalid quantity.`);
+            continue;
+        }
+
+        const stock = stocks.find(s => s.id === stockId);
+        if (!stock) {
+            errors.push(`[${stockId}] Stock not found.`);
+            continue;
+        }
+
+        const tradeValue = stock.currentPrice * qty;
+
+        // Initialize holdings
+        if (!team.stocks[stockId]) team.stocks[stockId] = 0;
+        if (!team.lockedStocks[stockId]) team.lockedStocks[stockId] = 0;
+
+        if (type === 'BUY') {
+            // Check cash (incorporating the net cash change from previous orders in the same batch)
+            if (team.cash + netCashChange < tradeValue) {
+                errors.push(`[${stockId}] Insufficient total cash for this buy. Need ₹${tradeValue}.`);
+                continue;
+            }
+
+            netCashChange -= tradeValue;
+            team.stocks[stockId] += qty;
+            team.lockedStocks[stockId] += qty;
+            stock.demand += qty;
+
+        } else if (type === 'SELL') {
+            const availableToSell = team.stocks[stockId] - team.lockedStocks[stockId];
+
+            if (team.stocks[stockId] < qty) {
+                errors.push(`[${stockId}] Not enough stocks owned. Have ${team.stocks[stockId]}.`);
+                continue;
+            }
+            if (availableToSell < qty) {
+                errors.push(`[${stockId}] Cannot sell locked stocks bought this round.`);
+                continue;
+            }
+
+            netCashChange += tradeValue;
+            team.stocks[stockId] -= qty;
+            stock.demand -= qty;
+        }
+
+        processedOrders.push({
+            stockId,
+            type,
+            quantity: qty,
+            executionPrice: stock.currentPrice,
+            totalValue: tradeValue
+        });
+
+        // Immediately update price after the order alters demand
+        updateStockPrice(stockId);
     }
 
-    updateStockPrice(stockId);
+    // Apply the net cash settlement to the team's account
+    team.cash += netCashChange;
 
-    // FIXED: Added cashToCollectOrGive so Broker knows the amount
     res.json({
-        message: "Trade Successful",
+        message: processedOrders.length > 0 ? "Batch Trade Processed" : "No orders processed",
         newCash: team.cash,
-        executionPrice: stock.currentPrice,
-        cashToCollectOrGive: tradeValue  // REQUIRED: Broker sees this amount
+        netCashToCollectOrGive: -netCashChange, // Positive means Broker Collects from Team (Team bought more than sold)
+        processed: processedOrders,
+        errors: errors.length > 0 ? errors : undefined
     });
 });
 
