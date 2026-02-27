@@ -59,6 +59,8 @@ let optionsLedger = [];
 let pendingPayouts = [];
 
 // 4. Scheduled Shocks for Future Rounds
+let scheduledShocks = {};
+
 // 5. Configurable Slope
 let currentSlope = GAME_CONFIG.SLOPE;
 
