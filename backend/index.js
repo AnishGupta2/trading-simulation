@@ -97,6 +97,11 @@ function updateStockPrice(stockId) {
 
 // --- API ENDPOINTS ---
 
+// 0. HEALTH CHECK (For Railway)
+app.get('/', (req, res) => {
+    res.status(200).send("Trading Simulator Backend is Live!");
+});
+
 // 1. GET MARKET STATUS
 app.get('/api/market', (req, res) => {
     res.json({ round: currentRound, stocks });
