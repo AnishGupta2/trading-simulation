@@ -1,0 +1,177 @@
+{
+  "currentRound": 2,
+  "stocks": [
+    {
+      "id": "nestle",
+      "name": "Nestle",
+      "basePrice": 73,
+      "currentPrice": 73,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "britannia",
+      "name": "Britannia",
+      "basePrice": 66,
+      "currentPrice": 66,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "bikaji",
+      "name": "Bikaji",
+      "basePrice": 64,
+      "currentPrice": 64,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "heritage",
+      "name": "Heritage Foods",
+      "basePrice": 49,
+      "currentPrice": 49,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "sbi",
+      "name": "SBI",
+      "basePrice": 93,
+      "currentPrice": 93,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "icici",
+      "name": "ICICI Bank",
+      "basePrice": 77,
+      "currentPrice": 77,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "au_bank",
+      "name": "AU Small Finance Bank",
+      "basePrice": 54,
+      "currentPrice": 54,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "dhanlaxmi",
+      "name": "Dhanlaxmi Bank",
+      "basePrice": 54,
+      "currentPrice": 54,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "zomato",
+      "name": "Zomato",
+      "basePrice": 84,
+      "currentPrice": 84,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "paytm",
+      "name": "Paytm",
+      "basePrice": 70,
+      "currentPrice": 70,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "policybazaar",
+      "name": "PolicyBazaar",
+      "basePrice": 62,
+      "currentPrice": 62,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "cartrade",
+      "name": "CarTrade",
+      "basePrice": 63,
+      "currentPrice": 63,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "tcs",
+      "name": "TCS",
+      "basePrice": 87,
+      "currentPrice": 87,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "infosys",
+      "name": "Infosys",
+      "basePrice": 75,
+      "currentPrice": 75,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "coforge",
+      "name": "Coforge",
+      "basePrice": 62,
+      "currentPrice": 62,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "nucleus",
+      "name": "Nucleus Software",
+      "basePrice": 54,
+      "currentPrice": 54,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "sunpharma",
+      "name": "Sun Pharma",
+      "basePrice": 83,
+      "currentPrice": 83,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "drreddy",
+      "name": "Dr Reddy",
+      "basePrice": 74,
+      "currentPrice": 74,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "biocon",
+      "name": "Biocon",
+      "basePrice": 63,
+      "currentPrice": 63,
+      "demand": 0,
+      "shockFactor": 1
+    },
+    {
+      "id": "unichem",
+      "name": "Unichem Labs",
+      "basePrice": 56,
+      "currentPrice": 56,
+      "demand": 0,
+      "shockFactor": 1
+    }
+  ],
+  "teams": {
+    "7": {
+      "cash": 805,
+      "stocks": {
+        "britannia": 3
+      },
+      "lockedStocks": {}
+    }
+  },
+  "optionsLedger": [],
+  "pendingPayouts": [],
+  "scheduledShocks": {}
+}
