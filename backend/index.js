@@ -115,6 +115,9 @@ app.get('/api/team/:id', (req, res) => {
 
 // 3. STOCK TRADE (BATCH PROCESSING)
 app.post('/api/trade/stock', (req, res) => {
+    console.log("--- INCOMING TRADE PAYLOAD ---");
+    console.log("Headers:", req.headers);
+    console.log("Body:", req.body);
     const { teamId, orders } = req.body;
 
     // --- VALIDATION ---

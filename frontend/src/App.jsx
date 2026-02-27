@@ -138,9 +138,13 @@ function StockBroker() {
 
   const submitBatchOrder = () => {
     if (orderCart.length === 0) return;
+    if (!teamId.trim()) {
+      alert("Authentication Required: Please enter and VERIFY a Team ID before submitting orders.");
+      return;
+    }
 
     axios.post(`${API_URL}/trade/stock`, {
-      teamId,
+      teamId: teamId.trim(),
       orders: orderCart.map(o => ({ stockId: o.stockId, type: o.type, quantity: o.quantity }))
     }).then(res => {
       setTxnDetails({
