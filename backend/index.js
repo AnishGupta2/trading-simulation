@@ -128,59 +128,70 @@ app.post('/api/trade/stock', (req, res) => {
     const team = getTeam(teamId);
     let netCashChange = 0; // Positive means team gains cash (selling), negative means they pay (buying)
     let processedOrders = [];
-    let errors = [];
 
-    // Process each order sequentially
+    // DRY RUN: Track projected state changes to prevent partial batch manipulation
+    let projectedCash = team.cash;
+    let projectedStocks = { ...team.stocks };
+
+    // Pass 1: Validation & Projection
     for (const order of orders) {
         const { stockId, type, quantity } = order;
 
         if (type !== 'BUY' && type !== 'SELL') {
-            errors.push(`[${stockId}] Invalid type. Must be BUY or SELL.`);
-            continue;
+            return res.status(400).json({ error: `[${stockId}] Invalid type. Must be BUY or SELL.` });
         }
 
         const qty = parseInt(quantity);
         if (isNaN(qty) || qty <= 0) {
-            errors.push(`[${stockId}] Invalid quantity.`);
-            continue;
+            return res.status(400).json({ error: `[${stockId}] Invalid quantity.` });
         }
 
         const stock = stocks.find(s => s.id === stockId);
         if (!stock) {
-            errors.push(`[${stockId}] Stock not found.`);
-            continue;
+            return res.status(400).json({ error: `[${stockId}] Stock not found.` });
         }
 
         const tradeValue = stock.currentPrice * qty;
 
-        // Initialize holdings
-        if (!team.stocks[stockId]) team.stocks[stockId] = 0;
-        if (!team.lockedStocks[stockId]) team.lockedStocks[stockId] = 0;
+        // Initialize projected holdings if they don't exist yet
+        if (projectedStocks[stockId] === undefined) projectedStocks[stockId] = 0;
+        if (team.lockedStocks[stockId] === undefined) team.lockedStocks[stockId] = 0;
 
         if (type === 'BUY') {
-            // Check cash (incorporating the net cash change from previous orders in the same batch)
-            if (team.cash + netCashChange < tradeValue) {
-                errors.push(`[${stockId}] Insufficient total cash for this buy. Need ₹${tradeValue}.`);
-                continue;
+            projectedCash -= tradeValue;
+            if (projectedCash < 0) {
+                return res.status(400).json({ error: `[${stockId}] Insufficient total cash for this batch. Transaction aborted.` });
             }
-
-            netCashChange -= tradeValue;
-            team.stocks[stockId] += qty;
-            team.lockedStocks[stockId] += qty;
-            stock.demand += qty;
+            projectedStocks[stockId] += qty;
 
         } else if (type === 'SELL') {
-            const availableToSell = team.stocks[stockId] - team.lockedStocks[stockId];
+            const unlockedShares = projectedStocks[stockId] - team.lockedStocks[stockId];
 
-            if (team.stocks[stockId] < qty) {
-                errors.push(`[${stockId}] Not enough stocks owned. Have ${team.stocks[stockId]}.`);
-                continue;
+            if (projectedStocks[stockId] < qty) {
+                return res.status(400).json({ error: `[${stockId}] Not enough stocks owned. You only have ${projectedStocks[stockId]}. Transaction aborted.` });
             }
-            if (availableToSell < qty) {
-                errors.push(`[${stockId}] Cannot sell locked stocks bought this round.`);
-                continue;
+            if (unlockedShares < qty) {
+                return res.status(400).json({ error: `[${stockId}] Cannot sell locked stocks bought this round. Transaction aborted.` });
             }
 
+            projectedCash += tradeValue;
+            projectedStocks[stockId] -= qty;
+        }
+    }
+
+    // Pass 2: Execution (Only runs if ALL validation passed)
+    for (const order of orders) {
+        const { stockId, type, quantity } = order;
+        const qty = parseInt(quantity);
+        const stock = stocks.find(s => s.id === stockId);
+        const tradeValue = stock.currentPrice * qty;
+
+        if (type === 'BUY') {
+            netCashChange -= tradeValue;
+            team.stocks[stockId] = (team.stocks[stockId] || 0) + qty;
+            team.lockedStocks[stockId] = (team.lockedStocks[stockId] || 0) + qty;
+            stock.demand += qty;
+        } else if (type === 'SELL') {
             netCashChange += tradeValue;
             team.stocks[stockId] -= qty;
             stock.demand -= qty;
@@ -198,15 +209,14 @@ app.post('/api/trade/stock', (req, res) => {
         updateStockPrice(stockId);
     }
 
-    // Apply the net cash settlement to the team's account
+    // Apply the true net cash settlement
     team.cash += netCashChange;
 
     res.json({
-        message: processedOrders.length > 0 ? "Batch Trade Processed" : "No orders processed",
+        message: "Batch Trade Processed Successfully",
         newCash: team.cash,
-        netCashToCollectOrGive: -netCashChange, // Positive means Broker Collects from Team (Team bought more than sold)
-        processed: processedOrders,
-        errors: errors.length > 0 ? errors : undefined
+        netCashToCollectOrGive: -netCashChange, // Positive means Broker Collects from Team
+        processed: processedOrders
     });
 });
 
